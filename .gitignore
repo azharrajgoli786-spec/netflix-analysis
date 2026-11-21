@@ -1,0 +1,48 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# --- Virtual environments ---
+.conda/
+
+# --- Environment variables ---
+.env
+.env.*
+
+# --- Data ---
+# Raw dataset is fetched via kagglehub; ignore large/binary data files
+data/*.csv
+data/*.zip
+data/*.parquet
+data/*.xlsx
+
+# Keep data documentation tracked
+!data/README.md
+
+# --- Generated reports ---
+# Uncomment to keep exported HTML reports out of version control
+# *.html
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+
+# --- OS files ---
+Thumbs.db
+Desktop.ini
+.DS_Store
