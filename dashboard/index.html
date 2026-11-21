@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Netflix Analysis Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root {
+    --nf-red: #E50914;
+    --nf-dark: #141414;
+    --nf-card: #1f1f1f;
+    --nf-border: #2a2a2a;
+    --nf-text: #ffffff;
+    --nf-muted: #b3b3b3;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--nf-dark);
+    color: var(--nf-text);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(180deg, rgba(0,0,0,.8), rgba(20,20,20,.6)), var(--nf-dark);
+    border-bottom: 3px solid var(--nf-red);
+    padding: 24px 5%;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 28px;
+    letter-spacing: 2px;
+    color: var(--nf-red);
+    text-transform: uppercase;
+    font-weight: 800;
+  }
+  header p { color: var(--nf-muted); font-size: 14px; }
+
+  .container { padding: 24px 5% 48px; max-width: 1400px; margin: 0 auto; }
+
+  /* ---------- Filters ---------- */
+  .filters {
+    background: var(--nf-card);
+    border: 1px solid var(--nf-border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: 24px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 8px; }
+  .filter-group label {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--nf-muted);
+    font-weight: 700;
+  }
+  select, input[type="text"], input[type="range"] {
+    background: #2a2a2a;
+    color: var(--nf-text);
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 9px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  select:focus, input[type="text"]:focus { border-color: var(--nf-red); }
+  .year-range { display: flex; align-items: center; gap: 12px; }
+  .year-range input[type="range"] { width: 160px; padding: 0; accent-color: var(--nf-red); }
+  .year-badge {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 7px 10px;
+    font-size: 13px;
+    min-width: 58px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  button.reset {
+    background: transparent;
+    color: var(--nf-red);
+    border: 1px solid var(--nf-red);
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button.reset:hover { background: var(--nf-red); color: #fff; }
+
+  /* ---------- Summary cards ---------- */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--nf-card);
+    border: 1px solid var(--nf-border);
+    border-top: 3px solid var(--nf-red);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .card .value { font-size: 34px; font-weight: 800; color: var(--nf-red); line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .card .label { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--nf-muted); margin-top: 8px; font-weight: 700; }
+
+  /* ---------- Charts ---------- */
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .chart-card {
+    background: var(--nf-card);
+    border: 1px solid var(--nf-border);
+    border-radius: 8px;
+    padding: 18px;
+    min-height: 380px;
+  }
+  .chart-card h3 {
+    font-size: 14px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--nf-text);
+    margin-bottom: 6px;
+    border-left: 4px solid var(--nf-red);
+    padding-left: 10px;
+  }
+  .plot { width: 100%; height: 330px; }
+
+  /* ---------- Table ---------- */
+  .table-card {
+    background: var(--nf-card);
+    border: 1px solid var(--nf-border);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .table-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .table-head h3 {
+    font-size: 14px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    border-left: 4px solid var(--nf-red);
+    padding-left: 10px;
+  }
+  .table-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #search { width: 280px; max-width: 100%; }
+  #tableCount { color: var(--nf-muted); font-size: 13px; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead th {
+    position: sticky; top: 0;
+    background: #2a2a2a;
+    color: var(--nf-muted);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    text-align: left;
+    padding: 11px 12px;
+    border-bottom: 2px solid var(--nf-red);
+  }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--nf-border); color: #e5e5e5; }
+  tbody tr:hover { background: #262626; }
+  td.year, td.rating { white-space: nowrap; }
+  .tag {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .tag.movie { background: rgba(229,9,20,.18); color: #ff5a63; border: 1px solid rgba(229,9,20,.5); }
+  .tag.tv { background: rgba(111,178,255,.14); color: #8fc5ff; border: 1px solid rgba(111,178,255,.4); }
+  .empty { color: var(--nf-muted); text-align: center; padding: 28px !important; }
+
+  #status {
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 16px;
+    color: var(--nf-muted);
+  }
+  #status.error { color: #ff5a63; }
+  .hidden { display: none !important; }
+
+  footer {
+    text-align: center;
+    color: #666;
+    font-size: 12px;
+    padding: 20px;
+    border-top: 1px solid var(--nf-border);
+  }
+
+  @media (max-width: 900px) {
+    .charts { grid-template-columns: 1fr; }
+    .year-range input[type="range"] { width: 120px; }
+    header h1 { font-size: 22px; }
+    .card .value { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Netflix Analysis</h1>
+  <p>Static dashboard &mdash; titles, genres, countries &amp; ratings</p>
+</header>
+
+<div class="container">
+
+  <div id="status">Loading dataset&hellip;</div>
+
+  <div id="app" class="hidden">
+
+    <!-- Filters -->
+    <div class="filters">
+      <div class="filter-group">
+        <label for="typeFilter">Type</label>
+        <select id="typeFilter">
+          <option value="All">All</option>
+          <option value="Movie">Movie</option>
+          <option value="TV Show">TV Show</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label>Release year range</label>
+        <div class="year-range">
+          <span class="year-badge" id="yearMinLabel">–</span>
+          <input type="range" id="yearMin" min="0" max="2100" step="1" value="0">
+          <input type="range" id="yearMax" min="0" max="2100" step="1" value="2100">
+          <span class="year-badge" id="yearMaxLabel">–</span>
+        </div>
+      </div>
+
+      <button class="reset" id="resetBtn" type="button">Reset</button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="cards">
+      <div class="card"><div class="value" id="cardTotal">0</div><div class="label">Total titles</div></div>
+      <div class="card"><div class="value" id="cardMovies">0</div><div class="label">Movies</div></div>
+      <div class="card"><div class="value" id="cardTV">0</div><div class="label">TV Shows</div></div>
+      <div class="card"><div class="value" id="cardRatings">0</div><div class="label">Rating types</div></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts">
+      <div class="chart-card">
+        <h3>Movies vs TV Shows</h3>
+        <div id="donutChart" class="plot"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Titles added per year</h3>
+        <div id="timelineChart" class="plot"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Top 10 genres</h3>
+        <div id="genresChart" class="plot"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Top 10 countries</h3>
+        <div id="countriesChart" class="plot"></div>
+      </div>
+      <div class="chart-card">
+        <h3>Ratings distribution</h3>
+        <div id="ratingsChart" class="plot"></div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+      <div class="table-head">
+        <h3>Titles</h3>
+        <div class="table-tools">
+          <input type="text" id="search" placeholder="Search title, country, rating&hellip;">
+          <span id="tableCount"></span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Type</th>
+              <th>Country</th>
+              <th>Year</th>
+              <th>Rating</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>Netflix Analysis &mdash; static dashboard built with PapaParse &amp; Plotly.js</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var ROW_LIMIT = 100;           // rows rendered in the table
+  var NF_RED = "#E50914";
+  var GRAY = "#808080";
+
+  var rows = [];                 // all parsed rows
+  var filtered = [];             // rows matching type + year filters
+  var searched = [];             // filtered rows matching the search box
+
+  var el = function (id) { return document.getElementById(id); };
+
+  var statusEl = el("status");
+  var appEl = el("app");
+
+  /* ---------------- helpers ---------------- */
+
+  function fmt(n) { return n.toLocaleString("en-US"); }
+
+  function clean(v) {
+    if (v === null || v === undefined) return "";
+    var s = String(v).trim();
+    return s === "" || s.toLowerCase() === "nan" ? "" : s;
+  }
+
+  function splitMulti(v) {
+    // "country" and "listed_in" are comma separated; missing -> [] handled by caller
+    return clean(v).split(",").map(function (s) { return s.trim(); })
+      .filter(function (s) { return s !== ""; });
+  }
+
+  function countTop(items, n) {
+    var map = {};
+    items.forEach(function (k) { map[k] = (map[k] || 0) + 1; });
+    return Object.keys(map)
+      .map(function (k) { return { key: k, value: map[k] }; })
+      .sort(function (a, b) { return b.value - a.value; })
+      .slice(0, n);
+  }
+
+  var PLOT_LAYOUT_BASE = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    font: { color: "#e5e5e5", family: "Helvetica Neue, Helvetica, Arial, sans-serif", size: 12 },
+    margin: { l: 55, r: 20, t: 30, b: 55 },
+    xaxis: { gridcolor: "#2f2f2f", zerolinecolor: "#2f2f2f" },
+    yaxis: { gridcolor: "#2f2f2f", zerolinecolor: "#2f2f2f" },
+    legend: { orientation: "h", y: -0.2 }
+  };
+  var PLOT_CONFIG = { responsive: true, displayModeBar: false };
+
+  function draw(id, data, layout) {
+    var cfg = Object.assign({}, PLOT_CONFIG);
+    Plotly.react(id, data, Object.assign({}, PLOT_LAYOUT_BASE, layout), cfg);
+  }
+
+  function emptyPlot(id, msg) {
+    draw(id, [{
+      type: "scatter", x: [0, 1], y: [0, 1], mode: "text",
+      text: [msg, ""], textfont: { color: "#777", size: 15 },
+      hoverinfo: "skip", showlegend: false
+    }], {
+      xaxis: { visible: false }, yaxis: { visible: false },
+      annotations: []
+    });
+  }
+
+  /* ---------------- filtering ---------------- */
+
+  function applyFilters() {
+    var type = el("typeFilter").value;
+    var yMin = parseInt(el("yearMin").value, 10);
+    var yMax = parseInt(el("yearMax").value, 10);
+    if (yMin > yMax) { var t = yMin; yMin = yMax; yMax = t; }
+
+    el("yearMinLabel").textContent = yMin;
+    el("yearMaxLabel").textContent = yMax;
+
+    filtered = rows.filter(function (r) {
+      if (type !== "All" && r.type !== type) return false;
+      // rows with a missing/invalid release_year only pass when the full range is active
+      if (isNaN(r.release_year)) return yMin === yearBounds.min && yMax === yearBounds.max;
+      return r.release_year >= yMin && r.release_year <= yMax;
+    });
+
+    renderCards();
+    renderCharts();
+    renderTable();
+  }
+
+  /* ---------------- summary cards ---------------- */
+
+  function renderCards() {
+    var movies = 0, tv = 0;
+    var ratings = {};
+    filtered.forEach(function (r) {
+      if (r.type === "Movie") movies++;
+      else if (r.type === "TV Show") tv++;
+      if (r.rating) ratings[r.rating] = true;
+    });
+    el("cardTotal").textContent = fmt(filtered.length);
+    el("cardMovies").textContent = fmt(movies);
+    el("cardTV").textContent = fmt(tv);
+    el("cardRatings").textContent = fmt(Object.keys(ratings).length);
+  }
+
+  /* ---------------- charts ---------------- */
+
+  function renderCharts() {
+    renderDonut();
+    renderTimeline();
+    renderGenres();
+    renderCountries();
+    renderRatings();
+  }
+
+  function renderDonut() {
+    var movies = 0, tv = 0;
+    filtered.forEach(function (r) {
+      if (r.type === "Movie") movies++;
+      else if (r.type === "TV Show") tv++;
+    });
+    if (movies + tv === 0) return emptyPlot("donutChart", "No data for current filters");
+
+    draw("donutChart", [{
+      type: "pie",
+      labels: ["Movies", "TV Shows"],
+      values: [movies, tv],
+      hole: 0.62,
+      marker: { colors: [NF_RED, GRAY] },
+      textinfo: "label+percent",
+      textfont: { color: "#fff" },
+      hovertemplate: "%{label}: %{value:,}<extra></extra>"
+    }], {
+      margin: { l: 10, r: 10, t: 30, b: 40 },
+      legend: { orientation: "h", y: 0, x: 0.5, xanchor: "center" },
+      annotations: [{
+        text: "<b>" + fmt(movies + tv) + "</b><br>titles",
+        showarrow: false, font: { size: 14, color: "#fff" }
+      }]
+    });
+  }
+
+  function renderTimeline() {
+    // date_added -> year; missing / unparseable date_added is skipped
+    var byYear = {};
+    filtered.forEach(function (r) {
+      if (isNaN(r.added_year)) return;
+      byYear[r.added_year] = (byYear[r.added_year] || 0) + 1;
+    });
+    var years = Object.keys(byYear).map(Number).sort(function (a, b) { return a - b; });
+    if (!years.length) return emptyPlot("timelineChart", "No date_added data for current filters");
+
+    draw("timelineChart", [{
+      type: "scatter",
+      mode: "lines+markers",
+      x: years,
+      y: years.map(function (y) { return byYear[y]; }),
+      line: { color: NF_RED, width: 3 },
+      marker: { color: NF_RED, size: 6 },
+      fill: "tozeroy",
+      fillcolor: "rgba(229,9,20,0.12)",
+      hovertemplate: "%{x}: %{y:,} added<extra></extra>"
+    }], {
+      margin: { l: 55, r: 20, t: 30, b: 55 },
+      xaxis: { title: "Year added", gridcolor: "#2f2f2f", dticker: 2 },
+      yaxis: { title: "Titles", gridcolor: "#2f2f2f", rangemode: "tozero" }
+    });
+  }
+
+  function renderGenres() {
+    var genres = [];
+    filtered.forEach(function (r) { genres = genres.concat(splitMulti(r.listed_in)); });
+    var top = countTop(genres, 10);
+    if (!top.length) return emptyPlot("genresChart", "No genre data for current filters");
+
+    top.reverse(); // highest on top for horizontal bars
+    draw("genresChart", [{
+      type: "bar",
+      orientation: "h",
+      x: top.map(function (d) { return d.value; }),
+      y: top.map(function (d) { return d.key; }),
+      marker: { color: NF_RED },
+      hovertemplate: "%{y}: %{x:,}<extra></extra>"
+    }], {
+      margin: { l: 150, r: 20, t: 20, b: 45 },
+      xaxis: { title: "Titles", gridcolor: "#2f2f2f", rangemode: "tozero" },
+      yaxis: { gridcolor: "#2f2f2f", automargin: true }
+    });
+  }
+
+  function renderCountries() {
+    var countries = [];
+    filtered.forEach(function (r) {
+      // missing country -> skipped for this chart
+      countries = countries.concat(splitMulti(r.country));
+    });
+    var top = countTop(countries, 10);
+    if (!top.length) return emptyPlot("countriesChart", "No country data for current filters");
+
+    top.reverse();
+    draw("countriesChart", [{
+      type: "bar",
+      orientation: "h",
+      x: top.map(function (d) { return d.value; }),
+      y: top.map(function (d) { return d.key; }),
+      marker: { color: "#b3161f" },
+      hovertemplate: "%{y}: %{x:,}<extra></extra>"
+    }], {
+      margin: { l: 130, r: 20, t: 20, b: 45 },
+      xaxis: { title: "Titles", gridcolor: "#2f2f2f", rangemode: "tozero" },
+      yaxis: { gridcolor: "#2f2f2f", automargin: true }
+    });
+  }
+
+  function renderRatings() {
+    var counts = {};
+    filtered.forEach(function (r) {
+      var key = r.rating || "Unknown"; // missing rating grouped as Unknown
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    var keys = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    if (!keys.length) return emptyPlot("ratingsChart", "No data for current filters");
+
+    draw("ratingsChart", [{
+      type: "bar",
+      x: keys,
+      y: keys.map(function (k) { return counts[k]; }),
+      marker: { color: keys.map(function (k) { return k === "Unknown" ? GRAY : NF_RED; }) },
+      hovertemplate: "%{x}: %{y:,}<extra></extra>"
+    }], {
+      margin: { l: 55, r: 20, t: 30, b: 80 },
+      xaxis: { title: "Rating", gridcolor: "#2f2f2f", tickangle: -45 },
+      yaxis: { title: "Titles", gridcolor: "#2f2f2f", rangemode: "tozero" }
+    });
+  }
+
+  /* ---------------- table ---------------- */
+
+  function renderTable() {
+    var q = el("search").value.trim().toLowerCase();
+    searched = !q ? filtered : filtered.filter(function (r) {
+      return r.title.toLowerCase().indexOf(q) !== -1 ||
+             r.type.toLowerCase().indexOf(q) !== -1 ||
+             r.country.toLowerCase().indexOf(q) !== -1 ||
+             String(r.release_year).indexOf(q) !== -1 ||
+             r.rating.toLowerCase().indexOf(q) !== -1;
+    });
+
+    var body = el("tableBody");
+    var shown = searched.slice(0, ROW_LIMIT);
+
+    if (!shown.length) {
+      body.innerHTML = '<tr><td colspan="5" class="empty">No titles match your filters.</td></tr>';
+    } else {
+      body.innerHTML = shown.map(function (r) {
+        var tag = r.type === "Movie" ? "movie" : (r.type === "TV Show" ? "tv" : "");
+        return "<tr>" +
+          "<td>" + escapeHtml(r.title) + "</td>" +
+          '<td><span class="tag ' + tag + '">' + escapeHtml(r.type || "–") + "</span></td>" +
+          "<td>" + (r.country ? escapeHtml(r.country) : "–") + "</td>" +
+          '<td class="year">' + (isNaN(r.release_year) ? "–" : r.release_year) + "</td>" +
+          '<td class="rating">' + (r.rating ? escapeHtml(r.rating) : "–") + "</td>" +
+          "</tr>";
+      }).join("");
+    }
+
+    el("tableCount").textContent = "Showing " + fmt(Math.min(shown.length, searched.length)) +
+      " of " + fmt(searched.length) + " titles" +
+      (searched.length < filtered.length ? " (filtered from " + fmt(filtered.length) + ")" : "");
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  /* ---------------- data loading ---------------- */
+
+  var yearBounds = { min: 0, max: 2100 };
+
+  function initYearRange() {
+    var years = rows.map(function (r) { return r.release_year; })
+      .filter(function (y) { return !isNaN(y); });
+    yearBounds.min = Math.min.apply(null, years);
+    yearBounds.max = Math.max.apply(null, years);
+
+    var minInput = el("yearMin"), maxInput = el("yearMax");
+    minInput.min = maxInput.min = yearBounds.min;
+    minInput.max = maxInput.max = yearBounds.max;
+    minInput.value = yearBounds.min;
+    maxInput.value = yearBounds.max;
+    el("yearMinLabel").textContent = yearBounds.min;
+    el("yearMaxLabel").textContent = yearBounds.max;
+  }
+
+  function parseRow(d) {
+    var added = clean(d.date_added);
+    var addedYear = NaN;
+    if (added) {
+      var dt = new Date(added);
+      if (!isNaN(dt.getTime())) addedYear = dt.getFullYear();
+    }
+    var ry = parseInt(clean(d.release_year), 10);
+    return {
+      title: clean(d.title),
+      type: clean(d.type),
+      country: clean(d.country),
+      release_year: isNaN(ry) ? NaN : ry,
+      added_year: addedYear,
+      rating: clean(d.rating),
+      listed_in: clean(d.listed_in)
+    };
+  }
+
+  fetch("netflix_titles.csv")
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.text();
+    })
+    .then(function (text) {
+      var result = Papa.parse(text, { header: true, skipEmptyLines: true });
+      rows = result.data.map(parseRow).filter(function (r) { return r.title !== ""; });
+      if (!rows.length) throw new Error("No rows parsed");
+
+      statusEl.classList.add("hidden");
+      appEl.classList.remove("hidden");
+
+      initYearRange();
+      bindEvents();
+      applyFilters();
+    })
+    .catch(function (err) {
+      statusEl.classList.add("error");
+      statusEl.innerHTML = "Failed to load <code>netflix_titles.csv</code>.<br>" +
+        "Serve this folder over HTTP (e.g. <code>python -m http.server 8000</code>) " +
+        "&mdash; opening the file directly with <code>file://</code> will not work.<br><br>" +
+        "<small>" + escapeHtml(err.message) + "</small>";
+    });
+
+  /* ---------------- events ---------------- */
+
+  function bindEvents() {
+    el("typeFilter").addEventListener("change", applyFilters);
+
+    el("yearMin").addEventListener("input", function () {
+      if (parseInt(this.value, 10) > parseInt(el("yearMax").value, 10)) {
+        el("yearMax").value = this.value;
+      }
+      applyFilters();
+    });
+    el("yearMax").addEventListener("input", function () {
+      if (parseInt(this.value, 10) < parseInt(el("yearMin").value, 10)) {
+        el("yearMin").value = this.value;
+      }
+      applyFilters();
+    });
+
+    var searchTimer = null;
+    el("search").addEventListener("input", function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(renderTable, 150);
+    });
+
+    el("resetBtn").addEventListener("click", function () {
+      el("typeFilter").value = "All";
+      el("yearMin").value = yearBounds.min;
+      el("yearMax").value = yearBounds.max;
+      el("search").value = "";
+      applyFilters();
+    });
+  }
+})();
+</script>
+</body>
+</html>
